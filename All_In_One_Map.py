@@ -37,41 +37,46 @@ def runquery(tracts):
     config = configparser.ConfigParser()
     config.read('app_info.ini')
     
-    query = "SELECT " \
-            "CASE " \
-	        "    WHEN v.field_content IS NULL THEN 'no data' " \
-	        "    WHEN v.field_content = '' THEN v.field_content " \
-	        "    ELSE SUBSTRING(REGEXP_REPLACE(v.field_content,'\|(s|c|t|b)','','g'),1,12) " \
-            "END AS geoid, " \
-            "COUNT(DISTINCT p.id) AS total_patrons, " \
-            "SUM(p.checkout_total) AS total_checkouts, " \
-            "SUM(p.renewal_total) AS total_renewals, " \
-            "SUM(p.checkout_total + p.renewal_total) AS total_circ, " \
-            "SUM(p.checkout_count) AS total_checkouts_current, " \
-            "COUNT(DISTINCT h.id) AS total_holds_current, " \
-            "ROUND(AVG(DATE_PART('year',AGE(CURRENT_DATE,p.birth_date_gmt::DATE)))) AS avg_age, " \
-            "COUNT(DISTINCT p.id) FILTER(WHERE rm.creation_date_gmt::DATE >= NOW()::DATE - INTERVAL '1 year') AS total_new_patrons, " \
-            "COUNT(DISTINCT p.id) FILTER(WHERE p.activity_gmt::DATE >= NOW()::DATE - INTERVAL '1 year') AS total_active_patrons, " \
-            "ROUND(100.0 * (CAST(COUNT(DISTINCT p.id) FILTER(WHERE p.activity_gmt::DATE >= NOW()::DATE - INTERVAL '1 year') AS NUMERIC (12,2))) / CAST(COUNT(DISTINCT p.id) AS NUMERIC (12,2)), 2)::VARCHAR AS pct_active, " \
-            "COUNT(DISTINCT p.id) FILTER(WHERE ((p.mblock_code != '-') OR (p.owed_amt >= 10))) as total_blocked_patrons, " \
-            "ROUND(100.0 * (CAST(COUNT(DISTINCT p.id) FILTER(WHERE ((p.mblock_code != '-') OR (p.owed_amt >= 10))) as numeric (12,2)) / cast(COUNT(DISTINCT p.id) as numeric (12,2))),2)::VARCHAR AS pct_blocked, " \
-            "ROUND((100.0 * SUM(p.checkout_total))/(100.0 *COUNT(DISTINCT p.id)),2)::VARCHAR AS checkouts_per_patron, " \
-            "CASE " \
-	        "    WHEN v.field_content IS NULL OR v.field_content = '' THEN 'na' " \
-	        "    ELSE 'https://censusreporter.org/profiles/15000US'||SUBSTRING(REGEXP_REPLACE(v.field_content,'\|(s|c|t|b)','','g'),1,12) " \
-            "END AS census_reporter_url " \
-            "FROM sierra_view.patron_record p " \
-            "JOIN sierra_view.patron_record_address a " \
-            "ON p.id = a.patron_record_id AND a.patron_record_address_type_id = '1' " \
-            "JOIN sierra_view.record_metadata rm " \
-            "ON p.id = rm.id " \
-            "LEFT JOIN sierra_view.hold h " \
-            "ON p.id = h.patron_record_id " \
-            "LEFT JOIN sierra_view.varfield v " \
-            "ON v.record_id = p.id AND v.varfield_type_code = 'k' AND v.field_content ~ '^\|s\d{2}' " \
-            "WHERE SUBSTRING(REGEXP_REPLACE(v.field_content,'\|(s|c|t|b)','','g'),6,6) IN ("+tracts+") " \
-            "GROUP BY 1,15 " \
-            "ORDER BY 2 DESC " \
+    query = """\
+            SELECT
+            CASE 
+	            WHEN v.field_content IS NULL THEN 'no data' 
+	            WHEN v.field_content = '' THEN v.field_content 
+	            ELSE SUBSTRING(REGEXP_REPLACE(v.field_content,'\|(s|c|t|b)','','g'),1,12) 
+            END AS geoid, 
+            COUNT(DISTINCT p.id) AS total_patrons,
+            SUM(p.checkout_total) AS total_checkouts,
+            SUM(p.renewal_total) AS total_renewals,
+            SUM(p.checkout_total + p.renewal_total) AS total_circ,
+            SUM(p.checkout_count) AS total_checkouts_current,
+            COUNT(DISTINCT h.id) AS total_holds_current,
+            ROUND(AVG(DATE_PART('year',AGE(CURRENT_DATE,p.birth_date_gmt::DATE)))) AS avg_age,
+            COUNT(DISTINCT p.id) FILTER(WHERE rm.creation_date_gmt::DATE >= NOW()::DATE - INTERVAL '1 year') AS total_new_patrons,
+            COUNT(DISTINCT p.id) FILTER(WHERE p.activity_gmt::DATE >= NOW()::DATE - INTERVAL '1 year') AS total_active_patrons,
+            ROUND(100.0 * (CAST(COUNT(DISTINCT p.id) FILTER(WHERE p.activity_gmt::DATE >= NOW()::DATE - INTERVAL '1 year') AS NUMERIC (12,2))) / CAST(COUNT(DISTINCT p.id) AS NUMERIC (12,2)), 2)::VARCHAR AS pct_active,
+            COUNT(DISTINCT p.id) FILTER(WHERE ((p.mblock_code != '-') OR (p.owed_amt >= 10))) as total_blocked_patrons,
+            ROUND(100.0 * (CAST(COUNT(DISTINCT p.id) FILTER(WHERE ((p.mblock_code != '-') OR (p.owed_amt >= 10))) as numeric (12,2)) / cast(COUNT(DISTINCT p.id) as numeric (12,2))),2)::VARCHAR AS pct_blocked,
+            ROUND((100.0 * SUM(p.checkout_total))/(100.0 *COUNT(DISTINCT p.id)),2)::VARCHAR AS checkouts_per_patron,
+            CASE
+	            WHEN v.field_content IS NULL OR v.field_content = '' THEN 'na'
+	            ELSE 'https://censusreporter.org/profiles/15000US'||SUBSTRING(REGEXP_REPLACE(v.field_content,'\|(s|c|t|b)','','g'),1,12)
+            END AS census_reporter_url 
+            FROM sierra_view.patron_record p 
+            JOIN sierra_view.patron_record_address a 
+            ON p.id = a.patron_record_id AND a.patron_record_address_type_id = '1' 
+            JOIN sierra_view.record_metadata rm 
+            ON p.id = rm.id 
+            LEFT JOIN sierra_view.hold h 
+            ON p.id = h.patron_record_id 
+            LEFT JOIN sierra_view.varfield v 
+            ON v.record_id = p.id AND v.varfield_type_code = 'k' AND v.field_content ~ '^\|s\d{2}' 
+            WHERE SUBSTRING(REGEXP_REPLACE(v.field_content,'\|(s|c|t|b)','','g'),6,6) IN ("""\
+            +tracts+"""\
+            ) 
+            GROUP BY 1,15 
+            --HAVING COUNT(DISTINCT p.id) >= 80 
+            ORDER BY 2 DESC
+            """
       
     try:
 	    # variable connection string should be defined in the imported config file
